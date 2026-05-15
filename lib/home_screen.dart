@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_screen.dart';
 import 'request_service_screen.dart';
+import 'chat_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -63,7 +64,6 @@ class _HomeScreenState extends State<HomeScreen> {
   // --- PESTAÑA 1: Historial de Solicitudes del Cliente ---
   Widget _construirPestanaMisSolicitudes() {
     return StreamBuilder<QuerySnapshot>(
-      // Filtramos para traer SOLO los trabajos que solicitó este cliente
         stream: FirebaseFirestore.instance
             .collection('solicitudes')
             .where('clienteId', isEqualTo: user?.uid)
@@ -92,12 +92,19 @@ class _HomeScreenState extends State<HomeScreen> {
             itemCount: misSolicitudes.length,
             itemBuilder: (context, index) {
               var solicitud = misSolicitudes[index].data() as Map<String, dynamic>;
-              bool estaAceptado = solicitud['estado'] == 'aceptado';
+              String idDocumento = misSolicitudes[index].id;
+
+              // Evaluamos el estado exacto
+              String estado = solicitud['estado'] ?? 'pendiente';
 
               return Card(
                 elevation: 2,
                 margin: const EdgeInsets.only(bottom: 15),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    // Borde gris si ya se terminó
+                    side: BorderSide(color: estado == 'finalizado' ? Colors.grey.shade300 : Colors.transparent)
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(15.0),
                   child: Column(
@@ -106,20 +113,27 @@ class _HomeScreenState extends State<HomeScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(solicitud['servicio'] ?? 'Servicio', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange)),
-                          // Cambiamos el color según el estado
+                          Text(
+                              solicitud['servicio'] ?? 'Servicio',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: estado == 'finalizado' ? Colors.grey : Colors.orange)
+                          ),
                           Chip(
-                              label: Text(estaAceptado ? "Aceptado" : "Pendiente", style: TextStyle(color: estaAceptado ? Colors.green : Colors.orange)),
-                              backgroundColor: estaAceptado ? const Color(0xFFE8F5E9) : const Color(0xFFFFF3E0),
+                              label: Text(
+                                  estado == 'finalizado' ? "Finalizado" : (estado == 'aceptado' ? "Aceptado" : "Pendiente"),
+                                  style: TextStyle(color: estado == 'finalizado' ? Colors.grey : (estado == 'aceptado' ? Colors.green : Colors.orange))
+                              ),
+                              backgroundColor: estado == 'finalizado' ? Colors.grey[200] : (estado == 'aceptado' ? const Color(0xFFE8F5E9) : const Color(0xFFFFF3E0)),
                               side: BorderSide.none
                           ),
                         ],
                       ),
                       const Divider(),
-                      Text(solicitud['descripcion'] ?? 'Sin descripción'),
+                      Text(solicitud['descripcion'] ?? 'Sin descripción', style: TextStyle(color: estado == 'finalizado' ? Colors.grey : Colors.black)),
                       const SizedBox(height: 10),
-                      // Si ya fue aceptado, mostramos quién es el trabajador
-                      if (estaAceptado) ...[
+
+                      // --- RENDERIZADO CONDICIONAL DE 3 ESTADOS ---
+                      if (estado == 'aceptado') ...[
+                        // ESTADO 1: ACEPTADO (Muestra al trabajador y el botón de chat)
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(10)),
@@ -130,9 +144,39 @@ class _HomeScreenState extends State<HomeScreen> {
                               Expanded(child: Text("Trabajador asignado:\n${solicitud['trabajadorEmail']}", style: const TextStyle(fontSize: 13))),
                             ],
                           ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.push(context, MaterialPageRoute(
+                                builder: (context) => ChatScreen(solicitudId: idDocumento),
+                              ));
+                            },
+                            icon: const Icon(Icons.chat, color: Colors.white),
+                            label: const Text("Hablar con el Trabajador", style: TextStyle(color: Colors.white)),
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo),
+                          ),
                         )
+                      ] else if (estado == 'finalizado') ...[
+                        // ESTADO 2: FINALIZADO (Muestra mensaje de cierre y oculta el chat)
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(10)),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check_circle, color: Colors.grey, size: 20),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                  child: Text("El trabajador ${solicitud['trabajadorEmail'] ?? ''} ha finalizado este servicio.",
+                                      style: const TextStyle(fontSize: 13, color: Colors.grey))
+                              ),
+                            ],
+                          ),
+                        ),
                       ] else ...[
-                        // Si no, mostramos un mensaje de espera
+                        // ESTADO 3: PENDIENTE (Muestra mensaje de espera)
                         const Text("Buscando un trabajador disponible...", style: TextStyle(color: Colors.grey, fontSize: 13, fontStyle: FontStyle.italic)),
                       ]
                     ],
