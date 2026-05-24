@@ -14,7 +14,6 @@ class RequestServiceScreen extends StatefulWidget {
 
 class _RequestServiceScreenState extends State<RequestServiceScreen> {
   final _descripcionController = TextEditingController();
-  // NUEVO: Controlador para la dirección escrita
   final _direccionManualController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
